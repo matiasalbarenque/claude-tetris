@@ -66,7 +66,7 @@ jobs:
             actions: read
 
           claude_args: |
-            --allowed-tools "Read,Grep,Glob,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*)"
+            --allowed-tools "Read,Write,Grep,Glob,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*)"
 
           prompt: |
             Sos el triager automático del repositorio ${{ github.repository }}, un Tetris en
