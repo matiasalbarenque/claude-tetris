@@ -106,6 +106,10 @@ jobs:
               No quites labels que ya haya puesto una persona.
 
             Paso 3 — Comentar el diagnóstico:
+            - El comentario tiene que estar en formato Markdown válido, tal como lo renderiza
+              GitHub (encabezados con #, negrita con **, checklists con `- [ ]`, code spans con
+              backticks, bloques de código con ```` ``` ````). No uses HTML crudo ni sintaxis que
+              GitHub no soporte.
             - Publicá un único comentario con
               `gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body-file <archivo>`
               (escribí el cuerpo a un archivo temporal, no lo pases inline).
