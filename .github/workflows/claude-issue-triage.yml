@@ -1,0 +1,155 @@
+name: Claude Issue Triage
+
+on:
+  issues:
+    types: [opened, edited]
+
+concurrency:
+  group: issue-triage-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    # Solo issues abiertos, no re-disparado por el propio bot, y en "edited"
+    # solo si cambió título o cuerpo (evita ruido por otros cambios del evento).
+    if: |
+      github.event.issue.state == 'open' &&
+      github.event.sender.type != 'Bot' &&
+      (github.event.action != 'edited' ||
+       github.event.changes.body != null ||
+       github.event.changes.title != null)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Crea los labels custom si todavía no existen en el repo (idempotente).
+      # Deben mantenerse en sync manualmente con .github/labels.yml.
+      - name: Ensure custom labels exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          declare -a LABELS=(
+            "area:gameplay|1d76db|Lógica de piezas, colisión, rotación, scoring o loop del juego"
+            "area:ui|5319e7|Render en canvas, estilos o estructura del DOM"
+            "area:controls|0e8a16|Input de teclado y mapeo de teclas"
+            "area:docs|c5def5|README.md, CLAUDE.md u otra documentación"
+            "area:ci|bfd4f2|Workflows y configuración de .github/"
+            "priority:high|b60205|Prioridad alta"
+            "priority:medium|fbca04|Prioridad media"
+            "priority:low|0e8a16|Prioridad baja"
+            "complexity:low|c2e0c6|Cambio acotado, bajo esfuerzo estimado"
+            "complexity:medium|fef2c0|Esfuerzo estimado medio"
+            "complexity:high|f9d0c4|Cambio grande o riesgoso, esfuerzo estimado alto"
+            "needs-info|d876e3|Falta información o pasos de reproducción para poder diagnosticar"
+            "triaged-by-claude|ededed|Ya pasó por el triage automático de Claude"
+          )
+          for entry in "${LABELS[@]}"; do
+            IFS='|' read -r name color description <<< "$entry"
+            gh label create "$name" --color "$color" --description "$description" --repo "${{ github.repository }}" 2>/dev/null || true
+          done
+
+      - name: Run Claude issue triage
+        id: claude-triage
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          additional_permissions: |
+            actions: read
+
+          claude_args: |
+            --allowed-tools "Read,Grep,Glob,Bash(gh issue view:*),Bash(gh issue edit:*),Bash(gh issue comment:*),Bash(gh label list:*)"
+
+          prompt: |
+            Sos el triager automático del repositorio ${{ github.repository }}, un Tetris en
+            JavaScript vanilla sin dependencias ni build (tres archivos: index.html, style.css,
+            game.js). Tenés que analizar el issue #${{ github.event.issue.number }} y hacer dos
+            cosas: asignarle labels apropiados y publicar un diagnóstico técnico que sirva de
+            input directo para implementar la solución más adelante.
+
+            No escribas ni modifiques ningún archivo del repo. No abras pull requests. Tu única
+            salida son labels y un comentario en el issue.
+
+            Paso 1 — Entender el issue y el código:
+            - Corré `gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json title,body,labels,comments`
+              para leer el título, cuerpo y labels actuales.
+            - Leé CLAUDE.md para entender la arquitectura (estado global en game.js, matriz
+              board, PIECES, rotateCW/tryRotate con wall kicks, collide(), loop con
+              requestAnimationFrame, scoring, render, input por keydown).
+            - Leé las partes relevantes de game.js, index.html y style.css según de qué habla el
+              issue. No diagnostiques nada sin haber abierto el código real.
+            - Si el issue no tiene información suficiente para entender qué pide o reporta (por
+              ejemplo, cuerpo vacío, sin pasos de reproducción en un bug), tratalo como caso de
+              información faltante: igual seguí los pasos 2 y 3, pero marcando needs-info y sin
+              inventar un diagnóstico que no podés sustentar.
+
+            Paso 2 — Etiquetar:
+            - Corré `gh label list --repo ${{ github.repository }} --limit 100` para ver los
+              labels reales disponibles. Nunca uses un label que no esté en esa lista.
+            - Elegí exactamente un label de tipo: bug, enhancement, documentation o question.
+            - Elegí uno o más labels de área: area:gameplay, area:ui, area:controls, area:docs,
+              area:ci (según a qué parte del código/repo afecta).
+            - Elegí exactamente un priority:high/medium/low y un complexity:low/medium/high,
+              usando tu mejor criterio según impacto y alcance del cambio.
+            - Si falta información para diagnosticar bien, agregá needs-info.
+            - Agregá siempre triaged-by-claude al final.
+            - Aplicá los labels con
+              `gh issue edit ${{ github.event.issue.number }} --repo ${{ github.repository }} --add-label "label1,label2,..."`.
+              No quites labels que ya haya puesto una persona.
+
+            Paso 3 — Comentar el diagnóstico:
+            - Publicá un único comentario con
+              `gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} --body-file <archivo>`
+              (escribí el cuerpo a un archivo temporal, no lo pases inline).
+            - Si es un issue normal (bug/enhancement/question con contexto suficiente), usá esta
+              plantilla exacta, en español, completando cada sección:
+
+              ## 🔎 Diagnóstico automático
+
+              **Tipo:** …  **Área:** …  **Prioridad:** …  **Complejidad:** …
+
+              ### Resumen
+              Una o dos frases de qué pide o reporta el issue.
+
+              ### Comportamiento actual
+              Qué hace hoy el código, citando archivo:línea y nombres de función reales del
+              repo (por ejemplo collide, tryRotate, lockPiece, clearLines, draw, ghostY, merge,
+              spawn).
+
+              ### Causa probable / punto de intervención
+              Archivos y funciones concretas a tocar, con rutas y líneas.
+
+              ### Enfoque de solución propuesto
+              Pasos numerados, a alto nivel, sin escribir código.
+
+              ### Riesgos / efectos colaterales
+              Por ejemplo: cambiar COLS/ROWS/BLOCK obliga a actualizar el width/height del
+              canvas #board en index.html.
+
+              ### Criterios de aceptación
+              - [ ] …
+
+              ### Información faltante
+              Solo incluí esta sección si realmente falta algo; si no, omitila.
+
+              ---
+              *Generado automáticamente. Para implementar el fix, comentá `@claude` en este issue
+              describiendo qué querés que haga.*
+
+            - Si el issue es spam, ininteligible, o directamente inválido (no es un reporte real
+              sobre este proyecto), no uses la plantilla completa: etiquetalo como invalid, dejá
+              un comentario de una línea explicando por qué, y de todas formas agregá
+              triaged-by-claude.
+
+            Reglas finales: sé preciso y concreto, no inventes números de línea ni nombres de
+            función que no existan en el repo, y no repitas el diagnóstico completo si el issue
+            fue editado y vos ya habías comentado antes con el mismo contenido sin cambios
+            relevantes — en ese caso podés comentar una versión breve señalando qué cambió.

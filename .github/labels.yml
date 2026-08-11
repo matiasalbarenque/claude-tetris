@@ -1,0 +1,60 @@
+# Labels custom usados por el workflow de triage automático
+# (.github/workflows/claude-issue-triage.yml).
+#
+# Estos se suman a los 9 labels default de GitHub (bug, enhancement,
+# documentation, question, duplicate, invalid, wontfix, help wanted,
+# good first issue), que no se listan acá porque ya existen en el repo.
+#
+# Formato: name, color (hex sin #), description.
+
+- name: "area:gameplay"
+  color: "1d76db"
+  description: "Lógica de piezas, colisión, rotación, scoring o loop del juego"
+
+- name: "area:ui"
+  color: "5319e7"
+  description: "Render en canvas, estilos o estructura del DOM"
+
+- name: "area:controls"
+  color: "0e8a16"
+  description: "Input de teclado y mapeo de teclas"
+
+- name: "area:docs"
+  color: "c5def5"
+  description: "README.md, CLAUDE.md u otra documentación"
+
+- name: "area:ci"
+  color: "bfd4f2"
+  description: "Workflows y configuración de .github/"
+
+- name: "priority:high"
+  color: "b60205"
+  description: "Prioridad alta"
+
+- name: "priority:medium"
+  color: "fbca04"
+  description: "Prioridad media"
+
+- name: "priority:low"
+  color: "0e8a16"
+  description: "Prioridad baja"
+
+- name: "complexity:low"
+  color: "c2e0c6"
+  description: "Cambio acotado, bajo esfuerzo estimado"
+
+- name: "complexity:medium"
+  color: "fef2c0"
+  description: "Esfuerzo estimado medio"
+
+- name: "complexity:high"
+  color: "f9d0c4"
+  description: "Cambio grande o riesgoso, esfuerzo estimado alto"
+
+- name: "needs-info"
+  color: "d876e3"
+  description: "Falta información o pasos de reproducción para poder diagnosticar"
+
+- name: "triaged-by-claude"
+  color: "ededed"
+  description: "Ya pasó por el triage automático de Claude"
